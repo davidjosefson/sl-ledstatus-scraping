@@ -1,3 +1,7 @@
+//TODO:
+//- fixa errorhanteringen så att den verkligen funkar, nu är det ett härke av try catchar och callbacks..
+//- eller åtminstone, kolla så att det verkar vattentätt
+
 var mongoose = require('mongoose');
 var request = require('request');
 var mongo = require('./mongo').Section;
@@ -25,25 +29,14 @@ winston.log('info', 'Running main!');
 
 run();
 
-function connectToMongo(callbackWhenDone) {
-    try {
-        mongoose.connect(mongoConnectUrl, function() {
-            winston.log('info', 'Connected to mongoDB');
-            callbackWhenDone();
-        });
-    } catch (e) {
-        winston.log('error', 'Error when trying to connect to mongoDB', e.toString());
-    }
-}
-
-
 function run()  {
     async.series(
         [
             function(next){
+                winston.log('info','Connecting to mongo..');
                 mongoose.connect(mongoConnectUrl, function(err){
                     if(!err){
-                        winston.log('info', 'Connected to mongoDB');
+                        winston.log('info', 'Connected to mongoDB!');
                     }else {
                         winston.log('error', 'Connection to mongoDB failed with the following error: ', err.toString());
                     }
@@ -56,16 +49,27 @@ function run()  {
             function(next) {
                 getJsonAddToMongo(next);
             },
-            function(next) {
-                console.log('Closing connection..');
+            function(done) {
+                winston.log('info', 'Disconnecting from Mongo..');
                 mongoose.connection.close(function() {
-                    winston.log('info', 'Closed mongo connection');
+                    winston.log('info', 'Mongo disconnected!');
                 });
-                next();
+                done();
             }
         ]
     );
 }
+
+// function connectToMongo(callbackWhenDone) {
+//     try {
+//         mongoose.connect(mongoConnectUrl, function() {
+//             winston.log('info', 'Connected to mongoDB');
+//             callbackWhenDone();
+//         });
+//     } catch (e) {
+//         winston.log('error', 'Error when trying to connect to mongoDB', e.toString());
+//     }
+// }
 
 function dropReportsCollectionInMongoDB(callbackWhenDone) {
     mongo.remove({}, function(err) {
@@ -128,10 +132,8 @@ function addToMongo(preparedFaults, callbackWhenDone) {
         newSection.save(function(err) {
             if (!err) {
                 winston.log('info', 'Added fault for ', fault.sectionId);
-                // console.log('added fault');
             } else {
                 winston.log('error', 'Error when trying to save fault for ', fault.sectionId, ' to mongo');
-                // console.log('didnt add fault');
             }
             faultDone();
         });
@@ -146,47 +148,16 @@ function addToMongo(preparedFaults, callbackWhenDone) {
         callbackWhenDone();
     });
 
-
     // } catch (e) {
     //     winston.log('error', 'Error when trying add data to mongodb', e.toString());
     // }
 
 }
 
-
-function add(response, iter) {
-    var object = {
-        provider: 'Skåneleden',
-        id: getId(response.etapp, response.led),
-        trail: response.led,
-        trailName: response.led.substring(6, response.led.length),
-        trailId: response.led.substring(3, 4),
-        section: response.etapp,
-        sectionName: getName(response.etapp),
-        sectionId: transformSection(response.etapp.substring(0, 3)),
-        length: response.langd,
-        difficulty: fixDifficulty(response.gradering),
-        rating: response.betyg,
-        trivia: response.kort_beskrivning,
-        nature: response.natur,
-        culture: response.kulturhistoria,
-        url: response.url,
-        pdfFile: response.pdfinformation,
-        gpxFile: response.gpxfil
-    };
-
-    var newSection = new mongo(object);
-    newSection.save(function(err) {
-        if (!err)
-            console.log('saved');
-        else
-            console.log('not saved');
-    });
-}
-
 //Disconnects mongoDB when application terminates
 process.on('SIGINT', function() {
     mongoose.connection.close(function() {
+        winston.log('info', 'Disconnected MongoDB after node unexpectedly was terminated!');
         process.exit(0);
     });
 });
