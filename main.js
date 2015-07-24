@@ -3,6 +3,7 @@ var request = require('request');
 var mongo = require('./mongo').Section;
 var winston = require('winston');
 var async = require('async');
+var q = require('q');
 
 var importIOurl = "***REMOVED***";
 var mongoConnectUrl = '***REMOVED***';
@@ -20,27 +21,65 @@ sectionMap['Ås-åsleden'] = 3;
 sectionMap['Österlenleden'] = 4;
 sectionMap['Öresundsleden'] = 5;
 
-winston.log('info', 'Runing main!');
+winston.log('info', 'Running main!');
 
-async.series(
-    [
-        function(callback){
-            dropReportsCollectionInMongoDB(function(error){
-                callback();
-            });
-        },
-        function(callback){
-            getJsonAddToMongo(function(error){
-                callback();
-            });
+run();
+
+function connectToMongo(callbackWhenDone) {
+    try {
+        mongoose.connect(mongoConnectUrl, function() {
+            winston.log('info', 'Connected to mongoDB');
+            callbackWhenDone();
+        });
+    } catch (e) {
+        winston.log('error', 'Error when trying to connect to mongoDB', e.toString());
+    }
+}
+
+
+function run()  {
+    async.series(
+        [
+            function(next){
+                mongoose.connect(mongoConnectUrl, function(err){
+                    if(!err){
+                        winston.log('info', 'Connected to mongoDB');
+                    }else {
+                        winston.log('error', 'Connection to mongoDB failed with the following error: ', err.toString());
+                    }
+                    next();
+                });
+            },
+            function(next) {
+                dropReportsCollectionInMongoDB(next);
+            },
+            function(next) {
+                getJsonAddToMongo(next);
+            },
+            function(next) {
+                console.log('Closing connection..');
+                mongoose.connection.close(function() {
+                    winston.log('info', 'Closed mongo connection');
+                });
+                next();
+            }
+        ]
+    );
+}
+
+function dropReportsCollectionInMongoDB(callbackWhenDone) {
+    mongo.remove({}, function(err) {
+        if (!err) {
+            winston.log('info', 'Removed existing content of skaneleden_report from mongodb');
+        } else {
+            winston.log('error', 'Failed to remove existing content of skaneleden_report from mongodb');
         }
-    ]);
+
+        callbackWhenDone();
+    });
+}
 
 function getJsonAddToMongo(callbackWhenDone) {
-    // dropReportsCollectionInMongoDB(function(error) {
-    // console.log('Kommer till getJson-callback, före iferror');
-    // if (!error)  {
-    //     console.log('Kommer till getJson-callback');
     var jsonResult;
 
     request(importIOurl, function(error, response, body) {
@@ -48,34 +87,14 @@ function getJsonAddToMongo(callbackWhenDone) {
             try {
                 jsonResult = JSON.parse(response.body);
                 preparedFaults = prepareFaults(jsonResult.results);
-                addToMongo(preparedFaults);
+                addToMongo(preparedFaults, function() {
+                    callbackWhenDone();
+                });
             } catch (e) {
                 winston.log('error', 'Error when parsing json form import.io: ', e.toString());
             }
         } else  {
             winston.log('error', 'Error received when requesting importIOurl: ', error.toString());
-        }
-        callbackWhenDone(null, 'testresult');
-    });
-
-
-    // }
-    // });
-}
-
-function dropReportsCollectionInMongoDB(callbackWhenDone) {
-    mongoose.connect(mongoConnectUrl);
-
-    console.log('Kommer till dropReports()');
-    mongo.remove({}, function(err) {
-        if (!err) {
-            console.log('Kommer till dropReports !err');
-            winston.log('info', 'Removed existing content of skaneleden_report from mongodb');
-            callbackWhenDone(null, 'dropResult');
-        } else {
-            console.log('Kommer till dropReports else error');
-            winston.log('error', 'Failed to remove existing content of skaneleden_report from mongodb');
-            callbackWhenDone('Error when trying to remove the existing content from mongodb', null);
         }
     });
 }
@@ -102,33 +121,35 @@ function renameKeysAddSectionId(fault) {
     return preparedFault;
 }
 
-function addToMongo(preparedFaults) {
-    try {
-
-
-        async.each(preparedFaults, function(fault, faultDone)  {
-            var newSection = new mongo(fault);
-            newSection.save(function(err) {
-                if (!err) {
-                    winston.log('info', 'Added fault for ', fault.sectionId);
-                } else {
-                    winston.log('error', 'Error when trying to save fault for ', fault.sectionId, ' to mongo');
-                }
-                faultDone();
-            });
-        }, function(err) {
+function addToMongo(preparedFaults, callbackWhenDone) {
+    // try {
+    async.each(preparedFaults, function(fault, faultDone)  {
+        var newSection = new mongo(fault);
+        newSection.save(function(err) {
             if (!err) {
-                winston.log('info', 'All faults added');
+                winston.log('info', 'Added fault for ', fault.sectionId);
+                // console.log('added fault');
             } else {
-                winston.log('error', 'Error after async has made some magic', JSON.stringify(err));
+                winston.log('error', 'Error when trying to save fault for ', fault.sectionId, ' to mongo');
+                // console.log('didnt add fault');
             }
-
-            mongoose.connection.close();
-
+            faultDone();
         });
-    } catch (e) {
-        winston.log('error', 'Error when trying to connect and add data to mongodb', e.toString());
-    }
+    }, function(err) {
+        if (!err) {
+            winston.log('info', 'All faults added');
+        } else {
+            winston.log('error', 'Error after async has made some magic', JSON.stringify(err));
+        }
+
+        // mongoose.connection.close();
+        callbackWhenDone();
+    });
+
+
+    // } catch (e) {
+    //     winston.log('error', 'Error when trying add data to mongodb', e.toString());
+    // }
 
 }
 
@@ -162,3 +183,10 @@ function add(response, iter) {
             console.log('not saved');
     });
 }
+
+//Disconnects mongoDB when application terminates
+process.on('SIGINT', function() {
+    mongoose.connection.close(function() {
+        process.exit(0);
+    });
+});
