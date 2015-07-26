@@ -4,11 +4,10 @@
 
 var mongoose = require('mongoose');
 var request = require('request');
-var mongo = require('./mongo').Section;
+var skaneleden_report = require('./mongo').Section;
 var winston = require('winston');
 var async = require('async');
 var q = require('q');
-var bluebird = require('bluebird');
 
 var importIOurl = "***REMOVED***";
 var mongoConnectUrl = '***REMOVED***';
@@ -73,7 +72,7 @@ function run()  {
 // }
 
 function dropReportsCollectionInMongoDB(callbackWhenDone) {
-    mongo.remove({}, function(err) {
+    skaneleden_report.remove({}, function(err) {
         if (!err) {
             winston.log('info', 'Removed existing content of skaneleden_report from mongodb');
         } else {
