@@ -8,6 +8,7 @@ var mongo = require('./mongo').Section;
 var winston = require('winston');
 var async = require('async');
 var q = require('q');
+var bluebird = require('bluebird');
 
 var importIOurl = "***REMOVED***";
 var mongoConnectUrl = '***REMOVED***';
@@ -32,12 +33,12 @@ run();
 function run()  {
     async.series(
         [
-            function(next){
-                winston.log('info','Connecting to mongo..');
-                mongoose.connect(mongoConnectUrl, function(err){
-                    if(!err){
+            function(next) {
+                winston.log('info', 'Connecting to mongo..');
+                mongoose.connect(mongoConnectUrl, function(err) {
+                    if (!err) {
                         winston.log('info', 'Connected to mongoDB!');
-                    }else {
+                    } else {
                         winston.log('error', 'Connection to mongoDB failed with the following error: ', err.toString());
                     }
                     next();
