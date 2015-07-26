@@ -1,19 +1,14 @@
-//TODO:
-//- fixa errorhanteringen så att den verkligen funkar, nu är det ett härke av try catchar och callbacks..
-//- eller åtminstone, kolla så att det verkar vattentätt
-
-var mongoose = require('mongoose');
-var request = require('request');
+var bluebird = require('bluebird');
+var mongoose = bluebird.promisifyAll(require('mongoose'));
+var request = bluebird.promisifyAll(require('request'));
+var winston = bluebird.promisifyAll(require('winston'));
 var skaneleden_report = require('./mongo').Section;
-var winston = require('winston');
-var async = require('async');
-var q = require('q');
 
 var importIOurl = "***REMOVED***";
+// var mongoConnectUrl = '***REMOVED***';
 var mongoConnectUrl = '***REMOVED***';
-// mongoose.connect('***REMOVED***');
 
-
+//Adding log file to write info and errors to
 winston.add(winston.transports.File, {
     filename: 'winstonError.log'
 });
@@ -25,84 +20,60 @@ sectionMap['Ås-åsleden'] = 3;
 sectionMap['Österlenleden'] = 4;
 sectionMap['Öresundsleden'] = 5;
 
-winston.log('info', 'Running main!');
+winston.log('info', 'Connecting to mongo..');
 
-run();
+mongoose.connectAsync(mongoConnectUrl)
+    .then(function() {
+        winston.log('info', 'Connected to mongo');
+        winston.log('info', 'Removing existing data from mongo and requesting data from import.io (async operations)..');
 
-function run()  {
-    async.series(
-        [
-            function(next) {
-                winston.log('info', 'Connecting to mongo..');
-                mongoose.connect(mongoConnectUrl, function(err) {
-                    if (!err) {
-                        winston.log('info', 'Connected to mongoDB!');
-                    } else {
-                        winston.log('error', 'Connection to mongoDB failed with the following error: ', err.toString());
-                    }
-                    next();
-                });
-            },
-            function(next) {
-                dropReportsCollectionInMongoDB(next);
-            },
-            function(next) {
-                getJsonAddToMongo(next);
-            },
-            function(done) {
-                winston.log('info', 'Disconnecting from Mongo..');
-                mongoose.connection.close(function() {
-                    winston.log('info', 'Mongo disconnected!');
-                });
-                done();
-            }
-        ]
-    );
-}
+        //Removing mongo data and fetching import.io-data simultaneously
+        return bluebird.join(skaneleden_report.remove({}), request.getAsync(importIOurl), function(removemessage, requestResponse) {
+            return requestResponse;
+        });
+    })
+    .then(function(requestResponse) {
+        winston.log('info', 'Requested data was fetched');
+        winston.log('info', 'Trying to parse JSON-data..');
 
-// function connectToMongo(callbackWhenDone) {
-//     try {
-//         mongoose.connect(mongoConnectUrl, function() {
-//             winston.log('info', 'Connected to mongoDB');
-//             callbackWhenDone();
-//         });
-//     } catch (e) {
-//         winston.log('error', 'Error when trying to connect to mongoDB', e.toString());
-//     }
-// }
+        //Parsing json
+        faults = JSON.parse(requestResponse[0].body).results;
 
-function dropReportsCollectionInMongoDB(callbackWhenDone) {
-    skaneleden_report.remove({}, function(err) {
-        if (!err) {
-            winston.log('info', 'Removed existing content of skaneleden_report from mongodb');
-        } else {
-            winston.log('error', 'Failed to remove existing content of skaneleden_report from mongodb');
+        winston.log('info', 'Parsing successful');
+
+        return prepareFaults(faults);
+    })
+    .then(function(faults) {
+        winston.log('info', 'Preparing to save each fault to mongo..');
+
+        var mongoSaves = [];
+
+        //Storing each mongo-save in an array
+        for (var i = 0; i < faults.length; i++) {
+            fault = faults[i];
+            var report = new skaneleden_report(fault);
+            mongoSaves.push(report.save());
         }
 
-        callbackWhenDone();
+        winston.log('info', 'Saving all faults to mongo');
+
+        //Running all saves() simultaneously
+        return bluebird.all(mongoSaves);
+    })
+    .catch(SyntaxError, function(err) {
+        winston.log('error', 'Failed to parse fetched JSON: ', err);
+    })
+    .catch(function(err) {
+        winston.log('error', 'Something went wrong, here is the error received: ', err);
+    })
+    .finally(function(result) {
+        winston.log('info', 'All done');
+        winston.log('info', 'Closing mongo connection');
+
+        return mongoose.connection.close();
     });
-}
 
-function getJsonAddToMongo(callbackWhenDone) {
-    var jsonResult;
-
-    request(importIOurl, function(error, response, body) {
-        if (!error) {
-            try {
-                jsonResult = JSON.parse(response.body);
-                preparedFaults = prepareFaults(jsonResult.results);
-                addToMongo(preparedFaults, function() {
-                    callbackWhenDone();
-                });
-            } catch (e) {
-                winston.log('error', 'Error when parsing json form import.io: ', e.toString());
-            }
-        } else  {
-            winston.log('error', 'Error received when requesting importIOurl: ', error.toString());
-        }
-    });
-}
-
+//Cleaning the fetched json data to fit the mongo schema
 function prepareFaults(json) {
     var preparedFaults =   [];
 
@@ -124,40 +95,3 @@ function renameKeysAddSectionId(fault) {
 
     return preparedFault;
 }
-
-function addToMongo(preparedFaults, callbackWhenDone) {
-    // try {
-    async.each(preparedFaults, function(fault, faultDone)  {
-        var newSection = new mongo(fault);
-        newSection.save(function(err) {
-            if (!err) {
-                winston.log('info', 'Added fault for ', fault.sectionId);
-            } else {
-                winston.log('error', 'Error when trying to save fault for ', fault.sectionId, ' to mongo');
-            }
-            faultDone();
-        });
-    }, function(err) {
-        if (!err) {
-            winston.log('info', 'All faults added');
-        } else {
-            winston.log('error', 'Error after async has made some magic', JSON.stringify(err));
-        }
-
-        // mongoose.connection.close();
-        callbackWhenDone();
-    });
-
-    // } catch (e) {
-    //     winston.log('error', 'Error when trying add data to mongodb', e.toString());
-    // }
-
-}
-
-//Disconnects mongoDB when application terminates
-process.on('SIGINT', function() {
-    mongoose.connection.close(function() {
-        winston.log('info', 'Disconnected MongoDB after node unexpectedly was terminated!');
-        process.exit(0);
-    });
-});
