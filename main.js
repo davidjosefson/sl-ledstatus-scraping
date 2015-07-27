@@ -11,7 +11,14 @@ var slack = require('slack-notify')(SLACKWEBHOOK_URL);
 
 var IMPORTIO_URL = "***REMOVED***";
 // var mongoConnectUrl = '***REMOVED***';
-var MONGODB_URL = '***REMOVED***';
+
+var MONGOLAB_OPTIONS = {
+    user: ***REMOVED***
+    pass: ***REMOVED***
+};
+
+var MONGOLAB_URL = '***REMOVED***';
+// var MONGODB_URL = '***REMOVED***';
 
 //Adding log file to write info and errors to
 winston.add(winston.transports.File, {
@@ -27,7 +34,7 @@ sectionMap['Öresundsleden'] = 5;
 
 winston.log('info', 'Connecting to mongo..');
 
-mongoose.connectAsync(MONGODB_URL)
+mongoose.connectAsync(MONGOLAB_URL, MONGOLAB_OPTIONS)
     .then(function() {
         winston.log('info', 'Connected to mongo');
         winston.log('info', 'Removing existing data from mongo and requesting data from import.io (async operations)..');
