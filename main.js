@@ -2,11 +2,16 @@ var bluebird = require('bluebird');
 var mongoose = bluebird.promisifyAll(require('mongoose'));
 var request = bluebird.promisifyAll(require('request'));
 var winston = bluebird.promisifyAll(require('winston'));
+
 var skaneleden_report = require('./mongo').Section;
 
-var importIOurl = "***REMOVED***";
+//Posting to Slack
+var SLACKWEBHOOK_URL = '***REMOVED***';
+var slack = require('slack-notify')(SLACKWEBHOOK_URL);
+
+var IMPORTIO_URL = "***REMOVED***";
 // var mongoConnectUrl = '***REMOVED***';
-var mongoConnectUrl = '***REMOVED***';
+var MONGODB_URL = '***REMOVED***';
 
 //Adding log file to write info and errors to
 winston.add(winston.transports.File, {
@@ -22,13 +27,13 @@ sectionMap['Öresundsleden'] = 5;
 
 winston.log('info', 'Connecting to mongo..');
 
-mongoose.connectAsync(mongoConnectUrl)
+mongoose.connectAsync(MONGODB_URL)
     .then(function() {
         winston.log('info', 'Connected to mongo');
         winston.log('info', 'Removing existing data from mongo and requesting data from import.io (async operations)..');
 
         //Removing mongo data and fetching import.io-data simultaneously
-        return bluebird.join(skaneleden_report.remove({}), request.getAsync(importIOurl), function(removemessage, requestResponse) {
+        return bluebird.join(skaneleden_report.remove({}), request.getAsync(IMPORTIO_URL), function(removemessage, requestResponse) {
             return requestResponse;
         });
     })
@@ -60,14 +65,19 @@ mongoose.connectAsync(mongoConnectUrl)
         //Running all saves() simultaneously
         return bluebird.all(mongoSaves);
     })
+    .then(function() {
+        postMessageOnSlack('Fetching done, no errors');
+        winston.log('info', 'All done, no errors');
+    })
     .catch(SyntaxError, function(err) {
+        postMessageOnSlack(err.toString());
         winston.log('error', 'Failed to parse fetched JSON: ', err);
     })
     .catch(function(err) {
+        postMessageOnSlack(err.toString());
         winston.log('error', 'Something went wrong, here is the error received: ', err);
     })
     .finally(function(result) {
-        winston.log('info', 'All done');
         winston.log('info', 'Closing mongo connection');
 
         return mongoose.connection.close();
@@ -94,4 +104,15 @@ function renameKeysAddSectionId(fault) {
     preparedFault.sectionId = 'SL' + sectionMap[fault.del_led] + 'E' + fault.etapp;
 
     return preparedFault;
+}
+
+function postMessageOnSlack(message) {
+    var today = new Date();
+
+    slack.send({
+        channel: '#loggning',
+        text: today.toUTCString() + ': ' + message,
+        unfurl_links: 1,
+        username: 'Autofetch ledstatus'
+    });
 }
