@@ -3,7 +3,7 @@ var mongoose = bluebird.promisifyAll(require('mongoose'));
 var request = bluebird.promisifyAll(require('request'));
 var winston = bluebird.promisifyAll(require('winston'));
 
-var skaneleden_report = require('./mongo').Section;
+var skaneleden_report = require('./mongo').Report;
 
 //Posting to Slack
 var SLACKWEBHOOK_URL = '***REMOVED***';

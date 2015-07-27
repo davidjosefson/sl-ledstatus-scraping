@@ -1,7 +1,7 @@
 var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
-var sectionSchema = new Schema({
+var report = new Schema({
     sectionId: {
         type: String
     },
@@ -16,8 +16,8 @@ var sectionSchema = new Schema({
     },
 
 });
-var Section = mongoose.model('skaneleden_report', sectionSchema);
+var report = mongoose.model('skaneleden_report', sectionSchema);
 
 module.exports = {
-    Section: Section
+    Report: report
 };
