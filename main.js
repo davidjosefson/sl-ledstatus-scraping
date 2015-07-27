@@ -22,7 +22,7 @@ var MONGOLAB_URL = '***REMOVED***';
 
 //Adding log file to write info and errors to
 winston.add(winston.transports.File, {
-    filename: 'winstonError.log'
+    filename: './ledstatus-scraping.log'
 });
 
 var sectionMap = {};
