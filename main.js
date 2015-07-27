@@ -1,24 +1,21 @@
+var credentials = require('./credentials');
+var skaneleden_report = require('./mongo');
 var bluebird = require('bluebird');
 var mongoose = bluebird.promisifyAll(require('mongoose'));
 var request = bluebird.promisifyAll(require('request'));
 var winston = bluebird.promisifyAll(require('winston'));
 
-var skaneleden_report = require('./mongo').Report;
-
-//Posting to Slack
-var SLACKWEBHOOK_URL = '***REMOVED***';
-var slack = require('slack-notify')(SLACKWEBHOOK_URL);
-
-var IMPORTIO_URL = "***REMOVED***";
-// var mongoConnectUrl = '***REMOVED***';
-
+//Credentials
+var SLACKWEBHOOK_URL = credentials.slack.url;
+var MONGOLAB_URL = credentials.mongo.url;
 var MONGOLAB_OPTIONS = {
-    user: ***REMOVED***
-    pass: ***REMOVED***
+    user: credentials.mongo.user,
+    pass: credentials.mongo.pass
 };
+var IMPORTIO_URL = credentials.importio.url;
 
-var MONGOLAB_URL = '***REMOVED***';
-// var MONGODB_URL = '***REMOVED***';
+//For posting to Slack using the slack webhook
+var slack = require('slack-notify')(SLACKWEBHOOK_URL);
 
 //Adding log file to write info and errors to
 winston.add(winston.transports.File, {
@@ -31,6 +28,7 @@ sectionMap['Nord-sydleden'] = 2;
 sectionMap['Ås-åsleden'] = 3;
 sectionMap['Österlenleden'] = 4;
 sectionMap['Öresundsleden'] = 5;
+
 
 winston.log('info', 'Connecting to mongo..');
 

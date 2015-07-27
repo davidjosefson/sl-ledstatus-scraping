@@ -18,6 +18,4 @@ var reportSchema = new Schema({
 });
 var report = mongoose.model('skaneleden_report', reportSchema);
 
-module.exports = {
-    Report: report
-};
+module.exports = report;

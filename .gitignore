@@ -1,5 +1,8 @@
+# Credentials file
+credentials.js
+
 # Sublime Text
-*.sublime-* 
+*.sublime-*
 
 # Logs
 logs
