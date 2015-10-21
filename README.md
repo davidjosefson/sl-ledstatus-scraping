@@ -1,4 +1,4 @@
 # sl-ledstatus-scraping
-Scraping av skaneleden.se/ledstatus, datan modifieras och sparas i en mongodatabas. Används i DIA-projektet 'Kartan'.
+Script for scraping data from [http://skaneleden.se/ledstatus](http://skaneleden.se/ledstatus) and saving it in a Mongo database. Used in the DIA project 'Kartan'.
 
-Scriptet förutsätter tillgång till filen credentials.js som utelämnats i repot av förklarliga skäl.
+The script needs access to the file credentials.js, which has been left out of the public repo.
